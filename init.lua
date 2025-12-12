@@ -93,6 +93,9 @@ vim.g.maplocalleader = ' '
 -- Set to true if you have a Nerd Font installed and selected in the terminal
 vim.g.have_nerd_font = true
 
+-- Disable netrw
+vim.g.loaded_netrwPlugin = 0
+
 -- [[ Setting options ]]
 -- See `:help vim.opt`
 -- NOTE: You can change these options as you wish!
@@ -203,6 +206,9 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+-- Switch between recent buffer
+vim.keymap.set('n', '<leader><tab>', '<C-^>', { noremap = true })
+
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
@@ -216,6 +222,21 @@ vim.api.nvim_create_autocmd('TextYankPost', {
     vim.highlight.on_yank()
   end,
 })
+
+-- Code folding
+
+-- Use treesitter for folding
+vim.opt.foldmethod = 'expr'
+vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+--
+-- vim.opt.foldcolumn = '0'
+--
+-- vim.opt.foldtext = ''
+--
+-- vim.opt.foldlevel = 99
+-- vim.opt.foldlevelstart = 1
+
+vim.opt.foldnestmax = 4
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -661,6 +682,7 @@ require('lazy').setup({
       --  So, we create new capabilities with nvim cmp, and then broadcast that to the servers.
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities = vim.tbl_deep_extend('force', capabilities, require('cmp_nvim_lsp').default_capabilities())
+      capabilities.textDocument.completion.completionItem.snippetSupport = true
 
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
@@ -698,6 +720,104 @@ require('lazy').setup({
               -- diagnostics = { disable = { 'missing-fields' } },
             },
           },
+        },
+        html = {
+          capabilities = capabilities,
+          filetypes = { 'html', 'templ', 'php.html', 'blade' },
+          init_options = {
+            configurationSection = { 'html', 'css', 'javascript' },
+            embeddedLanguages = {
+              css = true,
+              javascript = true,
+              php = true,
+              blade = true,
+            },
+            provideFormatter = true,
+          },
+        },
+        -- phpactor = {
+        --   filetypes = { 'php', 'php.html', 'blade' },
+        --   get_language_id = function(_, filetype)
+        --     if filetype == 'php.html' then
+        --       return 'php'
+        --     else
+        --       return filetype
+        --     end
+        --   end,
+        -- },
+        intelephense = {
+          filetypes = { 'php', 'php.html', 'blade', 'php_only' },
+          settings = {
+            intelephense = {
+              filetypes = { 'php', 'php.html', 'blade', 'php_only' },
+              files = {
+                associations = { '*.php', '*.blade.php' },
+                maxSize = 5000000,
+              },
+            },
+          },
+        },
+        emmet_language_server = {
+          filetypes = {
+            'css',
+            'eruby',
+            'html',
+            'htmldjango',
+            'javascriptreact',
+            'less',
+            'pug',
+            'sass',
+            'scss',
+            'typescriptreact',
+            'htmlangular',
+            'php',
+            'blade',
+          },
+        },
+        svelte = {
+          filetypes = { 'svelte' },
+          on_attach = function(client, bufnr)
+            if client.name == 'svelte' then
+              vim.api.nvim_create_autocmd('BufWritePost', {
+                pattern = { '*.js', '*.ts', '*.svelte' },
+                callback = function(ctx)
+                  client.notify('$/onDidChangeTsOrJsFile', { uri = ctx.file })
+                end,
+              })
+            end
+            if vim.bo[bufnr].filetype == 'svelte' then
+              vim.api.nvim_create_autocmd('BufWritePost', {
+                pattern = { '*.js', '*.ts', '*.svelte' },
+                callback = function(ctx)
+                  client.notify('$/onDidChangeTsOrJsFile', { uri = ctx.file })
+                end,
+              })
+            end
+            vim.api.nvim_create_autocmd('BufWritePost', {
+              pattern = { '*.js', '*.ts' },
+              callback = function(ctx)
+                -- this bad boy updates imports between svelte and ts/js files
+                client.notify('$/onDidChangeTsOrJsFile', { uri = ctx.match })
+              end,
+            })
+          end,
+        },
+        ts_ls = {
+          settings = {
+            javascript = {
+              format = {
+                enable = false,
+              },
+            },
+            typescript = {
+              format = {
+                enable = false,
+              },
+            },
+          },
+        },
+        pyright = {
+          capabilities = capabilities,
         },
       }
 
@@ -745,7 +865,7 @@ require('lazy').setup({
       {
         '<leader>f',
         function()
-          require('conform').format { async = true, lsp_format = 'fallback' }
+          require('conform').format { timeout_ms = 2500, async = true, lsp_format = 'fallback' }
         end,
         mode = '',
         desc = '[F]ormat buffer',
@@ -762,7 +882,7 @@ require('lazy').setup({
           return nil
         else
           return {
-            timeout_ms = 500,
+            timeout_ms = 2500,
             lsp_format = 'fallback',
           }
         end
@@ -774,6 +894,12 @@ require('lazy').setup({
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        html = { 'prettierd' },
+        javascript = { 'prettierd' },
+        php = { 'pint' },
+        blade = { 'blade-formatter', 'rustywind' },
+        svelte = { 'prettierd' },
+        python = { 'black' },
       },
     },
   },
@@ -821,7 +947,20 @@ require('lazy').setup({
       local luasnip = require 'luasnip'
       luasnip.config.setup {}
 
+      local kind_icons = {
+        BladeNav = '',
+      }
+
       cmp.setup {
+        formatting = {
+          format = function(entry, item)
+            if kind_icons[item.kind] then
+              item.kind = string.format('%s %s', kind_icons[item.kind], item.kind)
+            end
+
+            return item
+          end,
+        },
         snippet = {
           expand = function(args)
             luasnip.lsp_expand(args.body)
@@ -964,7 +1103,25 @@ require('lazy').setup({
     main = 'nvim-treesitter.configs', -- Sets main module to use for opts
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+      ensure_installed = {
+        'bash',
+        'c',
+        'diff',
+        'html',
+        'lua',
+        'luadoc',
+        'markdown',
+        'markdown_inline',
+        'query',
+        'vim',
+        'vimdoc',
+        'php',
+        'blade',
+        'phpdoc',
+        'html',
+        'css',
+        'json',
+      },
       -- Autoinstall languages that are not installed
       auto_install = true,
       highlight = {
@@ -975,6 +1132,7 @@ require('lazy').setup({
         additional_vim_regex_highlighting = { 'ruby' },
       },
       indent = { enable = true, disable = { 'ruby' } },
+      autotag = { enable = true },
     },
     -- There are additional nvim-treesitter modules that you can use to interact
     -- with nvim-treesitter. You should go explore a few and see what interests you:
@@ -1031,6 +1189,15 @@ require('lazy').setup({
     },
   },
 })
+
+-- Show dashboard only when opening Neovim without any files, such as when opening a directory
+-- vim.api.nvim_create_autocmd('VimEnter', {
+--   callback = function()
+--     if vim.fn.argc() == 0 then
+--       vim.cmd 'Dashboard'
+--     end
+--   end,
+-- })
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
